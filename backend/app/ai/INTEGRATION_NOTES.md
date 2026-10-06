@@ -344,3 +344,21 @@ generation (42), A/B/C configuration splits, full overall/category metrics,
 rate-limit-safe failure records, and the standalone `python -m
 app.ai.ai_analyst.eval run|report` entry point. `backend/app/ai/docs/EVAL_REPORT.md`
 records that real model numbers remain pending until a key is available.
+
+## Phase 5: safe compatibility outcome
+
+Phase 5 performed the safe portion only. The Phase 1 manifest has no `REMOVE`
+verdicts: all legacy frontend endpoints remain `KEEP-COMPAT`, and shared
+routes/services/core files remain `KEEP-SHARED`. A whole-repository reference
+search was run before considering deletion and found active frontend callers in
+`src/api/client.js` and `src/components/Dashboard.jsx`; therefore **zero
+files and zero endpoints were removed**.
+
+`backend/app/ai/FRONTEND_NOTES.md` records the exact request/response contracts,
+the current callers, and why `AnalystService` cannot safely preserve the
+dashboard, mutable dataset, preprocessing, forecast, health, or legacy SSE
+shapes. `ai_analyst/legacy_contracts.json` and
+`tests/test_phase5_compat.py` provide a no-key contract/reference check that
+legacy routes remain registered and frontend callers remain untouched. No
+adapter was added where the shape cannot be preserved. Phase 6 is not
+implemented.
