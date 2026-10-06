@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from pathlib import Path
 
 INTENTS = ("data_query", "schema_question", "clarify", "chitchat", "out_of_scope")
 
@@ -63,6 +64,21 @@ _QUESTIONS = [
 
 
 def build_cases() -> list[EvalCase]:
+    # Keep the Python representation backwards compatible while YAML files are
+    # the authoritative, reviewable case catalogue.
+    try:
+        import yaml
+        paths = sorted((Path(__file__).parent / "cases").glob("*.yaml"))
+        loaded = []
+        for path in paths:
+            payload = yaml.safe_load(path.read_text()) or {}
+            loaded.extend(payload.get("cases", []))
+        if loaded:
+            return [EvalCase(c["id"], c["question"], c["intent"], c.get("expect"),
+                             tuple(c.get("tags", c.get("categories", []))),
+                             c.get("dataset", "seeded")) for c in loaded]
+    except (ImportError, OSError, ValueError, KeyError):
+        pass
     return [EvalCase(i, q, intent, expected, tuple(tags)) for i, q, intent, expected, tags in _QUESTIONS]
 
 

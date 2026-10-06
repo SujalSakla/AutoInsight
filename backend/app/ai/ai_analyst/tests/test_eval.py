@@ -7,11 +7,13 @@ from app.ai.ai_analyst.eval.datasets import dataset_fingerprint, seed_datasets
 from app.ai.ai_analyst.eval.metrics import compute_metrics
 from app.ai.ai_analyst.eval.report import make_report, write_report
 from app.ai.ai_analyst.eval.runner import run
+from app.ai.ai_analyst.eval.metrics import category_metrics
 
 
 def test_case_count_and_all_intents():
     assert len(CASES) >= 40
     assert {case.intent for case in CASES} == set(INTENTS)
+    assert all(case.dataset and case.expected is not None for case in CASES)
 
 
 def test_datasets_are_seeded_and_fresh():
@@ -34,6 +36,8 @@ def test_metrics_and_reports():
              "numeric_accuracy": 1, "verifier_caught": False, "latency_ms": 4}]
     metrics = compute_metrics(rows)
     assert metrics.total == 1 and metrics.mean_latency_ms == 4
+    assert metrics.route_accuracy == 1 and metrics.latency_p95_ms == 4
+    assert category_metrics([{**rows[0], "categories": ["aggregation"]}])["aggregation"].total == 1
     base = Path("ai_eval_test_report.json")
     try:
         paths = write_report(make_report(rows), base)

@@ -37,3 +37,14 @@ The JSON and Markdown reports are generated beside the requested output. The
 JSONL state file makes interrupted runs resumable; completed case IDs are skipped.
 Model responsibilities (router, planner, sql_gen, verifier, synthesizer) are
 configured independently in `models.yaml`.
+
+The reviewable catalogue is in `eval/cases/*.yaml`, including seeded verifier
+pairs. Larger reproducible CSV fixtures can be generated with
+`python -m app.ai.ai_analyst.eval.make_datasets` (NumPy seed 42). The complete
+CLI shape is also available without the legacy CLI:
+
+```bash
+python -m app.ai.ai_analyst.eval run --config eval/configs/A.yaml \
+  --cases eval/cases/core.yaml --out eval-report.json --dry-run
+python -m app.ai.ai_analyst.eval report --input eval-report.json
+```
