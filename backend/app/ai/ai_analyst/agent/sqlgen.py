@@ -29,6 +29,7 @@ def answer_with_sql(
     card: dict,
     session_id: str,
     history: list[dict] | None = None,
+    feedback: str | None = None,
 ) -> SqlOutcome:
     """Plan -> SQL -> execute. On an error, send it back to the model and retry."""
     system = (
@@ -47,6 +48,8 @@ def answer_with_sql(
             ),
         },
     ]
+    if feedback:
+        messages.append({"role": "user", "content": "<VERIFIER_FEEDBACK>\n" + feedback + "\n</VERIFIER_FEEDBACK>"})
     errors: list[str] = []
 
     for attempt in range(1, MAX_ATTEMPTS + 1):

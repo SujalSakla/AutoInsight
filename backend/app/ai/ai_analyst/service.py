@@ -14,6 +14,10 @@ from .store.duckdb_store import connect, new_session, write_tables
 from .errors import (
     AnalystError, FileTooLarge, SessionNotFound, UnsupportedFile,
 )
+from .verify.checks import run_checks
+from .verify.corrective import corrective_loop, verifier_enabled
+from .verify.grounding import deterministic_answer, numeric_grounding, value_grounding
+from .verify.verifier import verify
 log = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES, SESSION_TTL_SECONDS = AI_MAX_UPLOAD_BYTES, AI_SESSION_TTL_SECONDS
 ALLOWED_EXTENSIONS = frozenset(SUPPORTED)
@@ -110,7 +114,39 @@ class AnalystService:
                     plan=make_plan(message,prompt_card,history)
                     if plan.needs_clarification: result={"intent":"clarify","answer":plan.clarifying_question}
                     else:
-                        result={"intent":"data_query","answer":synthesize_answer(message,out,prompt_card,plan.assumptions,history),"sql":out.result.sql,"result":{"columns":list(out.result.df.columns),"rows":out.result.df.head(200).to_dict(orient="records"),"row_count":out.result.total_rows,"truncated":out.result.truncated}}
+                        out = answer_with_sql(message, plan, prompt_card, s, history)
+                        verify_started = time.perf_counter()
+                        findings = run_checks(message, plan, out.result.sql, out.result, prompt_card)
+                        value_evidence = {}
+                        if any(f.code == "EMPTY_RESULT" for f in findings):
+                            value_evidence = value_grounding(s, out.result.sql, __import__(
+                                "app.ai.ai_analyst.agent.executor", fromlist=["run_query"]).run_query)
+                        def do_verify(candidate, candidate_findings):
+                            return verify(message, plan, candidate.result.sql, candidate.result,
+                                          candidate_findings, prompt_card)
+                        def regenerate(candidate, old_verification, old_findings):
+                            feedback = (old_verification.fix_hint + "\n" +
+                                        "\n".join(i.detail for i in old_verification.issues) + "\n" +
+                                        "\n".join(f.message for f in old_findings) +
+                                        "\nColumn values evidence: " + json.dumps(value_evidence, default=str))
+                            return answer_with_sql(message, plan, prompt_card, s, history, feedback=feedback)
+                        checked = corrective_loop(out, verify=do_verify, regenerate=regenerate,
+                                                  findings=findings, enabled=verifier_enabled())
+                        out = checked.outcome
+                        answer = synthesize_answer(message, out, prompt_card, plan.assumptions, history)
+                        grounded, missing = numeric_grounding(answer, out.result, message)
+                        if not grounded:
+                            answer = synthesize_answer(message, out, prompt_card, plan.assumptions, history, strict_numeric=True)
+                            grounded, _ = numeric_grounding(answer, out.result, message)
+                        if not grounded:
+                            answer = deterministic_answer(out.result, message)
+                        result={"intent":"data_query","answer":answer,"sql":out.result.sql,
+                                "result":{"columns":list(out.result.df.columns),"rows":out.result.df.head(200).to_dict(orient="records"),"row_count":out.result.total_rows,"truncated":out.result.truncated},
+                                "verification":{"findings":[f.model_dump() for f in checked.findings],
+                                    "verdict": checked.verification.model_dump() if checked.verification else None,
+                                    "status": checked.status, "confidence": checked.confidence,
+                                    "corrections": checked.corrections,
+                                    "timing_ms":{"verify": round((time.perf_counter()-verify_started)*1000, 2)}}}
             finally:
                 for (module, name), value in zip(bindings, old):
                     setattr(module, name, value)
