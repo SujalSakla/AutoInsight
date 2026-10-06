@@ -326,3 +326,14 @@ Exact Phase 2 environment defaults are `AI_SESSION_TTL_HOURS=24`,
 defaults to 20 per minute. Privacy flags are applied to every LLM prompt,
 while the stored card remains complete. Prompt data blocks include an
 untrusted-data injection warning. Telemetry contains event metadata only.
+
+## Phase 4 Step 8: evaluation tooling
+
+Added the dev-only `ai_analyst/eval/` harness. It has 41 deterministic cases
+covering all five intents plus aggregation, join, date, null, casing, and
+adversarial behavior. Seeded fixtures include join/null-heavy `sales`,
+`customers`, and `targets` tables. Comparisons support scalar/table numeric
+tolerance, order and column mismatch diagnostics. Metrics include exact match,
+execution success, numeric accuracy, verifier catch rate, and mean latency.
+`eval run` supports `--model-set`, `--limit`, `--dry-run`, and JSONL resume state,
+and emits JSON and Markdown reports without real keys.

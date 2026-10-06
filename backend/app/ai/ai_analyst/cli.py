@@ -18,6 +18,8 @@ from app.ai.ai_analyst.store.duckdb_store import (
 )
 
 app = typer.Typer(help="AI Data Analyst (CLI)")
+eval_app = typer.Typer(help="Deterministic offline evaluation tools")
+app.add_typer(eval_app, name="eval")
 
 
 def _print_tables(infos: list[dict]) -> None:
@@ -324,6 +326,20 @@ def chat():
         # Keep history bounded (last 20 messages = 10 turns)
         if len(history) > 20:
             history = history[-20:]
+
+
+@eval_app.command("run")
+def eval_run(
+    model_set: str = typer.Option("offline", "--model-set"),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    state: Path = typer.Option(Path("eval-progress.jsonl"), "--state"),
+    output: Path = typer.Option(Path("eval-report.json"), "--output"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+):
+    """Run/resume the offline evaluation suite and write JSON + Markdown."""
+    from app.ai.ai_analyst.eval.runner import run
+    report = run(model_set=model_set, limit=limit, state=state, output=output, dry_run=dry_run)
+    typer.echo(f"Evaluated {report['metrics']['total']} cases; report: {output}")
 def chat():
     """Ask questions about the dataset (step 6)."""
     typer.echo("not implemented yet")
