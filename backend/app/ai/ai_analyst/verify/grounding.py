@@ -14,7 +14,7 @@ def _number(text: str) -> float:
 
 
 def _values(result) -> list[float]:
-    df = getattr(result, "df", result.get("df") if isinstance(result, dict) else None)
+    df = result.get("df") if isinstance(result, dict) else getattr(result, "df", None)
     vals = []
     if df is not None:
         for value in df.to_numpy().flat:
@@ -22,7 +22,7 @@ def _values(result) -> list[float]:
                 if value is not None and not (isinstance(value, float) and math.isnan(value)):
                     vals.append(float(value))
             except (TypeError, ValueError): pass
-    total = getattr(result, "total_rows", result.get("row_count") if isinstance(result, dict) else None)
+    total = result.get("row_count") if isinstance(result, dict) else getattr(result, "total_rows", None)
     if total is not None: vals.append(float(total))
     return vals
 
@@ -35,15 +35,17 @@ def numeric_grounding(answer: str, result, question: str = "") -> tuple[bool, li
         value = _number(token)
         if 1900 <= value <= 2100 and (value in ignored or re.search(rf"\b{int(value)}\b", question)):
             continue
-        if any(abs(value - actual) <= max(abs(actual) * .005, .01) for actual in available):
+        candidates = [value / 100] if token.endswith("%") else [value]
+        if any(abs(candidate - actual) <= max(abs(actual) * .005, .01)
+               for candidate in candidates for actual in available):
             continue
         missing.append(token)
     return not missing, missing
 
 
 def deterministic_answer(result, question: str = "") -> str:
-    df = getattr(result, "df", result.get("df") if isinstance(result, dict) else None)
-    total = getattr(result, "total_rows", result.get("row_count") if isinstance(result, dict) else None)
+    df = result.get("df") if isinstance(result, dict) else getattr(result, "df", None)
+    total = result.get("row_count") if isinstance(result, dict) else getattr(result, "total_rows", None)
     if df is None or df.empty:
         return "No matching rows were found."
     if len(df) == 1 and len(df.columns) == 1:
@@ -61,15 +63,15 @@ def extract_filter_values(sql: str) -> list[tuple[str, str]]:
 def value_grounding(session_id: str, sql: str, run_query) -> dict[str, list[Any]]:
     """Fetch distinct alternatives for string filters, never interpolating raw values."""
     evidence = {}
+    table_match = re.search(r"\bfrom\s+([A-Za-z_]\w*)\b", sql or "", re.I)
+    if not table_match:
+        return evidence
+    table = table_match.group(1)
     for column, _ in extract_filter_values(sql):
-        if not re.match(r"^[A-Za-z_]\w*$", column): continue
-        try:
-            table = re.search(r"\bfrom\s+([A-Za-z_][\w\"]*)", sql or "", re.I)
-            if not table: continue
-            query = f'SELECT DISTINCT "{column}" FROM "{table.group(1).strip(chr(34))}" LIMIT 20'
-            rows = run_query(session_id, query)
-            df = getattr(rows, "df", None)
-            evidence[column] = [] if df is None else df.iloc[:, 0].dropna().tolist()[:20]
-        except Exception:
-            evidence[column] = []
+        if not re.fullmatch(r"[A-Za-z_]\w*", column):
+            raise ValueError(f"Unsafe value-grounding column identifier: {column!r}")
+        query = f'SELECT DISTINCT "{column}" FROM "{table}" LIMIT 20'
+        rows = run_query(session_id, query)
+        df = rows.get("df") if isinstance(rows, dict) else getattr(rows, "df", None)
+        evidence[column] = [] if df is None else df.iloc[:, 0].dropna().tolist()[:20]
     return evidence

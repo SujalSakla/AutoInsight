@@ -6,11 +6,11 @@ from .schemas import Finding
 
 
 def _df(result):
-    return getattr(result, "df", result.get("df") if isinstance(result, dict) else None)
+    return result.get("df") if isinstance(result, dict) else getattr(result, "df", None)
 
 
 def _sql(result, sql=None):
-    return sql or getattr(result, "sql", result.get("sql", "") if isinstance(result, dict) else "")
+    return sql or (result.get("sql", "") if isinstance(result, dict) else getattr(result, "sql", ""))
 
 
 def _columns(card: dict) -> list[tuple[str, dict]]:
@@ -41,18 +41,26 @@ def check_all_null(result, **_) -> Finding | None:
 
 def check_date_coverage(sql, card, **_) -> Finding | None:
     sql = sql or ""
-    years = [int(x) for x in re.findall(r"\b(19\d{2}|20\d{2}|21\d{2})\b", sql)]
-    literals = re.findall(r"'(\d{4}(?:-\d\d-\d\d)?)'", sql)
-    years += [int(x[:4]) for x in literals if x[:4].isdigit()]
-    if not years: return None
-    ranges = []
-    for name, c in _columns(card):
-        if c.get("kind") == "datetime" or "date" in name.lower() or "time" in name.lower():
-            if c.get("min") is not None and c.get("max") is not None:
-                ranges.append(f"{name}: {c['min']} to {c['max']}")
-                maxyear = int(str(c["max"])[:4])
-                if any(y > maxyear for y in years):
-                    return _f("warn", "DATE_COVERAGE", "Date filter is outside the covered range (" + "; ".join(ranges) + ").")
+    date_cols = [(name, c) for name, c in _columns(card)
+                 if c.get("kind") == "datetime" or "date" in name.lower() or "time" in name.lower()]
+    for name, c in date_cols:
+        if c.get("min") is None or c.get("max") is None:
+            continue
+        # Restrict the check to columns referenced by the query; otherwise an
+        # unrelated date column can produce a misleading warning.
+        if not re.search(rf"\b{re.escape(name)}\b", sql, re.I):
+            continue
+        max_date = str(c["max"])[:10]
+        literals = re.findall(r"'(\d{4}(?:-\d{2}-\d{2})?)'", sql)
+        years = [int(x) for x in re.findall(r"\b(19\d{2}|20\d{2}|21\d{2})\b", sql)]
+        requested_end = max((x + "-12-31" if len(x) == 4 else x)
+                            for x in literals if x[:4].isdigit()) if literals else None
+        if not requested_end and years:
+            requested_end = f"{max(years)}-12-31"
+        if requested_end and requested_end > max_date:
+            return _f("warn", "DATE_COVERAGE",
+                      f"Date filter for {name} extends beyond the covered range "
+                      f"({c['min']} to {c['max']}).")
 
 
 def check_topn_short(result, sql, **_) -> Finding | None:

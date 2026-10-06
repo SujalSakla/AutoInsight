@@ -13,7 +13,7 @@ def _preview(result) -> str:
     return json.dumps(df.head(20).iloc[:, :12].to_dict(orient="records"), default=str)
 
 
-def verify(question, plan, sql, result, findings, card, *, call=call_json) -> Verification:
+def verify(question, plan, sql, result, findings, card, *, call=None) -> Verification:
     prompt = load_prompt("verifier")
     messages = [
         {"role": "system", "content": prompt},
@@ -26,4 +26,4 @@ def verify(question, plan, sql, result, findings, card, *, call=call_json) -> Ve
             "\nDATA_CARD\n" + render_card_text(card) + "\n</DATA_BLOCK>"
         )},
     ]
-    return call("verifier", messages, Verification)
+    return (call or call_json)("verifier", messages, Verification)
