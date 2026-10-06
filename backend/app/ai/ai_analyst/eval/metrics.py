@@ -26,9 +26,14 @@ class Metrics:
     tokens: int = 0
     error_rate: float = 0.0
     fallback_rate: float = 0.0
+    stage_latency_p50_ms: dict[str, float] = None
+    stage_latency_p95_ms: dict[str, float] = None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        value = asdict(self)
+        value["stage_latency_p50_ms"] = value["stage_latency_p50_ms"] or {}
+        value["stage_latency_p95_ms"] = value["stage_latency_p95_ms"] or {}
+        return value
 
 
 def compute_metrics(results: Iterable[dict]) -> Metrics:
@@ -40,6 +45,17 @@ def compute_metrics(results: Iterable[dict]) -> Metrics:
     def rate(key, default=False):
         return sum(bool(r.get(key, default)) for r in rows) / n
     retries = [float(r.get("retries", 0)) for r in rows]
+    stages: dict[str, list[float]] = {}
+    for row in rows:
+        mapping = row.get("stage_latency_ms") or row.get("stage_latencies") or {}
+        for stage, latency in mapping.items():
+            try:
+                stages.setdefault(stage, []).append(float(latency))
+            except (TypeError, ValueError):
+                continue
+    p50 = {stage: statistics.median(values) for stage, values in stages.items()}
+    p95 = {stage: sorted(values)[max(0, int(0.95 * (len(values) - 1)))]
+           for stage, values in stages.items()}
     return Metrics(
         n,
         sum(bool(r.get("exact_match")) for r in rows) / n,
@@ -53,6 +69,7 @@ def compute_metrics(results: Iterable[dict]) -> Metrics:
         rate("correction_success"), rate("grounding_failure"),
         statistics.median(latencies), sorted(latencies)[max(0, int(0.95 * (n - 1)))],
         sum(int(r.get("tokens", 0)) for r in rows), rate("error"), rate("fallback"),
+        p50, p95,
     )
 
 

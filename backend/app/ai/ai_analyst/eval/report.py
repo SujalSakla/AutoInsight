@@ -23,7 +23,16 @@ def write_report(report: dict, output: str | Path) -> tuple[Path, Path]:
              "",
              "| Metric | Value |", "|---|---:|"]
     lines += [f"| {k.replace('_', ' ').title()} | {v:.4f} |" if isinstance(v, float)
-              else f"| {k.replace('_', ' ').title()} | {v} |" for k, v in m.items()]
+              else f"| {k.replace('_', ' ').title()} | {v} |"
+              for k, v in m.items() if not k.startswith("stage_latency_")]
+    if m.get("stage_latency_p50_ms") or m.get("stage_latency_p95_ms"):
+        lines += ["", "## Stage latency", "", "| Stage | P50 (ms) | P95 (ms) |",
+                  "|---|---:|---:|"]
+        stages = sorted(set(m.get("stage_latency_p50_ms", {})) |
+                        set(m.get("stage_latency_p95_ms", {})))
+        lines += [f"| {stage} | {m.get('stage_latency_p50_ms', {}).get(stage, 0):.2f} | "
+                  f"{m.get('stage_latency_p95_ms', {}).get(stage, 0):.2f} |"
+                  for stage in stages]
     lines += ["", "## Cases", "", "| Case | Intent | Exact | Success | Latency (ms) |",
               "|---|---|---:|---:|---:|"]
     lines += [f"| {r.get('case_id')} | {r.get('intent')} | {str(bool(r.get('exact_match'))).lower()} | "

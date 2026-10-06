@@ -342,5 +342,5 @@ The corrective follow-up adds YAML case catalogues with explicit dataset and
 expectation schemas, 15 incorrect plus 15 correct verifier pairs, seeded CSV
 generation (42), A/B/C configuration splits, full overall/category metrics,
 rate-limit-safe failure records, and the standalone `python -m
-app.ai.ai_analyst.eval run|report` entry point. `eval/docs/EVAL_REPORT.md`
+app.ai.ai_analyst.eval run|report` entry point. `backend/app/ai/docs/EVAL_REPORT.md`
 records that real model numbers remain pending until a key is available.

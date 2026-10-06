@@ -48,6 +48,25 @@ def test_metrics_and_reports():
             path.unlink(missing_ok=True)
 
 
+def test_stage_latency_percentiles_and_report():
+    report = make_report([
+        {"case_id": "a", "exact_match": True, "execution_success": True,
+         "latency_ms": 30, "stage_latency_ms": {"router": 10, "sql": 20}},
+        {"case_id": "b", "exact_match": True, "execution_success": True,
+         "latency_ms": 50, "stage_latency_ms": {"router": 30, "sql": 40}},
+    ])
+    assert report["metrics"]["stage_latency_p50_ms"] == {"router": 20, "sql": 30}
+    assert report["metrics"]["stage_latency_p95_ms"] == {"router": 10, "sql": 20}
+    base = Path("ai_eval_stage_report.json")
+    try:
+        _, markdown = write_report(report, base)
+        text = markdown.read_text()
+        assert "Stage latency" in text and "router" in text
+    finally:
+        base.unlink(missing_ok=True)
+        base.with_suffix(".md").unlink(missing_ok=True)
+
+
 def test_runner_resume_and_dry_run():
     state, output = Path("ai_eval_state.jsonl"), Path("ai_eval_resume.json")
     dry_state, dry_output = Path("ai_eval_dry.jsonl"), Path("ai_eval_dry.json")
